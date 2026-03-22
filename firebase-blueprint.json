@@ -1,0 +1,94 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User's own identity and personality profile.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "User's display name." },
+        "personalityType": { "type": "string", "description": "MBTI or other personality classification." },
+        "description": { "type": "string", "description": "Self-description or core values." },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "personalityType"]
+    },
+    "Relationship": {
+      "title": "Relationship",
+      "description": "A connection between the user and another individual.",
+      "type": "object",
+      "properties": {
+        "targetName": { "type": "string", "description": "Name of the other person." },
+        "personalityType": { "type": "string", "description": "Personality type of the target person." },
+        "type": { "type": "string", "description": "Nature of the relationship (manual input allowed)." },
+        "description": { "type": "string", "description": "Brief description of the relationship context." },
+        "chatHistory": { "type": "string", "description": "Imported chat history for deep analysis." },
+        "status": { "type": "string", "description": "Current state of the relationship (e.g., stable, tense)." },
+        "healthScore": { "type": "number", "description": "AI-calculated health score (0-100)." },
+        "lastAnalysis": { "type": "string", "description": "Last AI-generated prediction or insight." },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["targetName", "type"]
+    },
+    "EventLog": {
+      "title": "EventLog",
+      "description": "A specific interaction or event within a relationship.",
+      "type": "object",
+      "properties": {
+        "content": { "type": "string", "description": "Description of the event." },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["content", "timestamp"]
+    },
+    "Diary": {
+      "title": "Diary",
+      "description": "A personal diary entry that may mention people and relationships.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "mentions": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "IDs of relationships mentioned in this diary."
+        },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["content", "timestamp"]
+    },
+    "Connection": {
+      "title": "Connection",
+      "description": "A relationship between two non-user entities in the cosmos.",
+      "type": "object",
+      "properties": {
+        "nodeA": { "type": "string", "description": "ID of relationship A." },
+        "nodeB": { "type": "string", "description": "ID of relationship B." },
+        "perceptionAtoB": { "type": "string", "description": "How A perceives B." },
+        "perceptionBtoA": { "type": "string", "description": "How B perceives A." },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["nodeA", "nodeB"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Stores user profile data."
+    },
+    "/users/{userId}/relationships/{relationshipId}": {
+      "schema": "Relationship",
+      "description": "Stores relationship details for a user."
+    },
+    "/users/{userId}/relationships/{relationshipId}/events/{eventId}": {
+      "schema": "EventLog",
+      "description": "Stores event logs for a specific relationship."
+    },
+    "/users/{userId}/diaries/{diaryId}": {
+      "schema": "Diary",
+      "description": "Stores user diary entries."
+    },
+    "/users/{userId}/connections/{connectionId}": {
+      "schema": "Connection",
+      "description": "Stores connections between two entities."
+    }
+  }
+}

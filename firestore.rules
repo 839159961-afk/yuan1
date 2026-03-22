@@ -1,0 +1,149 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - name: string (required)
+    //   - personalityType: string (required)
+    //   - description: string (optional)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: users/{userId}/relationships
+    // Document ID: {relationshipId}
+    // Fields:
+    //   - targetName: string (required)
+    //   - personalityType: string (optional)
+    //   - type: string (required)
+    //   - description: string (optional)
+    //   - chatHistory: string (optional)
+    //   - status: string (optional)
+    //   - healthScore: number (optional, 0-100)
+    //   - lastAnalysis: string (optional)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: users/{userId}/relationships/{relationshipId}/events
+    // Document ID: {eventId}
+    // Fields:
+    //   - content: string (required)
+    //   - timestamp: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+         (request.auth.token.email == "839159961@qq.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidString(field, maxLen) {
+      return request.resource.data[field] is string && request.resource.data[field].size() <= maxLen;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUserProfile(data) {
+      return hasRequiredFields(['name', 'personalityType', 'updatedAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.personalityType is string && data.personalityType.size() < 50 &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidRelationship(data) {
+      return hasRequiredFields(['targetName', 'type', 'updatedAt']) &&
+             data.targetName is string && data.targetName.size() > 0 && data.targetName.size() < 100 &&
+             data.type is string && data.type.size() > 0 && data.type.size() < 50 &&
+             data.updatedAt is timestamp &&
+             (!('description' in data) || (data.description is string && data.description.size() < 1000)) &&
+             (!('chatHistory' in data) || (data.chatHistory is string && data.chatHistory.size() < 50000)) &&
+             (!('healthScore' in data) || (data.healthScore is number && data.healthScore >= 0 && data.healthScore <= 100)) &&
+             (!('lastAnalysis' in data) || (data.lastAnalysis is string && data.lastAnalysis.size() < 50000)) &&
+             (!('status' in data) || (data.status is string && data.status.size() < 200));
+    }
+
+    function isValidEvent(data) {
+      return hasRequiredFields(['content', 'timestamp']) &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 1000 &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidDiary(data) {
+      return hasRequiredFields(['content', 'timestamp']) &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 10000 &&
+             data.timestamp is timestamp &&
+             (!('title' in data) || (data.title is string && data.title.size() < 200)) &&
+             (!('mentions' in data) || (data.mentions is list));
+    }
+
+    function isValidConnection(data) {
+      return hasRequiredFields(['nodeA', 'nodeB']) &&
+             data.nodeA is string && data.nodeB is string &&
+             (!('perceptionAtoB' in data) || (data.perceptionAtoB is string && data.perceptionAtoB.size() < 2000)) &&
+             (!('perceptionBtoA' in data) || (data.perceptionBtoA is string && data.perceptionBtoA.size() < 2000));
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if (isOwner(userId) && isValidUserProfile(request.resource.data)) || isAdmin();
+      allow update: if (isOwner(userId) && isValidUserProfile(request.resource.data)) || isAdmin();
+      allow delete: if isAdmin();
+
+      match /diaries/{diaryId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) && isValidDiary(request.resource.data)) || isAdmin();
+        allow update: if (isOwner(userId) && isValidDiary(request.resource.data)) || isAdmin();
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /connections/{connectionId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) && isValidConnection(request.resource.data)) || isAdmin();
+        allow update: if (isOwner(userId) && isValidConnection(request.resource.data)) || isAdmin();
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /notifications/{notificationId} {
+        allow read, update, delete: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) || isAdmin();
+      }
+
+      match /relationships/{relationshipId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) && isValidRelationship(request.resource.data)) || isAdmin();
+        allow update: if (isOwner(userId) && isValidRelationship(request.resource.data)) || isAdmin();
+        allow delete: if isOwner(userId) || isAdmin();
+
+        match /events/{eventId} {
+          allow read: if isOwner(userId) || isAdmin();
+          allow create: if (isOwner(userId) && isValidEvent(request.resource.data)) || isAdmin();
+          allow update: if (isOwner(userId) && isValidEvent(request.resource.data)) || isAdmin();
+          allow delete: if isOwner(userId) || isAdmin();
+        }
+      }
+    }
+  }
+}
