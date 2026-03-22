@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { Timestamp } from "firebase/firestore";
 
 function safeJsonParse(text: string | undefined, fallback: any) {
   if (!text) return fallback;
@@ -36,9 +36,44 @@ const NETWORK_SYSTEM_PROMPT = `你是“缘 (YUÁN) - 关系宇宙 (RelationCosm
 专业、客观、具有前瞻性。
 输出必须是 Markdown 格式。`;
 
+const SELF_ANALYSIS_SYSTEM_PROMPT = `你是“缘 (YUÁN) - 关系宇宙 (RelationCosmos)”系统的自我镜像引擎。你的任务是基于用户的所有社交数据（个人资料、关系列表、日记记录），以极其客观、中立的视角剖析用户本人。
+
+分析维度：
+1. 性格底色：从用户的言行和关系处理模式中，挖掘其最深层的性格特征。
+2. 社交舒适区：识别用户在社交中感到最安全和最焦虑的场景。
+3. 潜意识偏好：分析用户在选择朋友或伴侣时，潜意识里在寻找什么。
+4. 核心矛盾：识别用户内心深处存在的自我认知与现实表现之间的冲突。
+5. 未来可能性推演：基于当前模式，客观描述用户未来可能的发展路径与潜在成就。
+6. 停滞代价：如果用户不进行自我调整或不突破当前局限，可能会面临的后果与代价。
+7. 进化建议：提供针对性的自我成长和心理调适建议。
+
+输出风格：
+客观冷静、直击灵魂、犀利但不失温情、充满哲学思辨。
+输出必须是 Markdown 格式。`;
+
+async function callGeminiBackend(contents: any, config: any = {}, model: string = "gemini-3-flash-preview") {
+  try {
+    const response = await fetch("/api/gemini/generate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ contents, config, model }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Backend API error: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Call Gemini Backend failed:", error);
+    throw error;
+  }
+}
+
 export async function analyzeRelationship(userProfile: any, targetProfile: any, events: any[]) {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  
   const eventsText = events.map(e => `[${e.timestamp}] ${e.content}`).join('\n');
   const chatHistoryText = targetProfile.chatHistory ? `\n导入的聊天记录：\n${targetProfile.chatHistory}\n` : '';
   const descriptionText = targetProfile.description ? `\n关系描述：\n${targetProfile.description}\n` : '';
@@ -59,13 +94,9 @@ ${eventsText}
 }`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-        responseMimeType: "application/json"
-      },
+    const response = await callGeminiBackend(prompt, {
+      systemInstruction: SYSTEM_PROMPT,
+      responseMimeType: "application/json"
     });
     
     return safeJsonParse(response.text, { healthScore: 70, analysis: "天机难测，请稍后再试。", reminder: "保持关注" });
@@ -76,8 +107,6 @@ ${eventsText}
 }
 
 export async function analyzeNetwork(userProfile: any, relationships: any[]) {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  
   const relsText = relationships.map(r => `- ${r.targetName} (${r.type}): ${r.status}`).join('\n');
   const prompt = `
 用户资料：${JSON.stringify(userProfile)}
@@ -87,12 +116,8 @@ ${relsText}
 请提供整体关系网络分析报告，包含健康度评分、关系分布、关注提醒和关系模式洞察。`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        systemInstruction: NETWORK_SYSTEM_PROMPT,
-      },
+    const response = await callGeminiBackend(prompt, {
+      systemInstruction: NETWORK_SYSTEM_PROMPT,
     });
     
     return response.text;
@@ -103,8 +128,6 @@ ${relsText}
 }
 
 export async function extractEntities(diaryContent: string, existingRelationships: any[]) {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  
   const relsText = existingRelationships.map(r => `- ${r.targetName} (ID: ${r.id})`).join('\n');
   const prompt = `
 日记内容：
@@ -121,12 +144,8 @@ ${relsText}
 }`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json"
-      },
+    const response = await callGeminiBackend(prompt, {
+      responseMimeType: "application/json"
     });
     
     return safeJsonParse(response.text, { mentionedIds: [], newEntities: [] });
@@ -137,8 +156,6 @@ ${relsText}
 }
 
 export async function analyzeMutualPerception(nodeA: any, nodeB: any, userProfile: any) {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  
   const prompt = `
 人物 A：${JSON.stringify(nodeA)}
 人物 B：${JSON.stringify(nodeB)}
@@ -152,12 +169,8 @@ export async function analyzeMutualPerception(nodeA: any, nodeB: any, userProfil
 }`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json"
-      },
+    const response = await callGeminiBackend(prompt, {
+      responseMimeType: "application/json"
     });
     
     return safeJsonParse(response.text, { perceptionAtoB: "无法推测", perceptionBtoA: "无法推测" });
@@ -167,24 +180,7 @@ export async function analyzeMutualPerception(nodeA: any, nodeB: any, userProfil
   }
 }
 
-const SELF_ANALYSIS_SYSTEM_PROMPT = `你是“缘 (YUÁN) - 关系宇宙 (RelationCosmos)”系统的自我镜像引擎。你的任务是基于用户的所有社交数据（个人资料、关系列表、日记记录），以极其客观、中立的视角剖析用户本人。
-
-分析维度：
-1. 性格底色：从用户的言行和关系处理模式中，挖掘其最深层的性格特征。
-2. 社交舒适区：识别用户在社交中感到最安全和最焦虑的场景。
-3. 潜意识偏好：分析用户在选择朋友或伴侣时，潜意识里在寻找什么。
-4. 核心矛盾：识别用户内心深处存在的自我认知与现实表现之间的冲突。
-5. 未来可能性推演：基于当前模式，客观描述用户未来可能的发展路径与潜在成就。
-6. 停滞代价：如果用户不进行自我调整或不突破当前局限，可能会面临的后果与代价。
-7. 进化建议：提供针对性的自我成长和心理调适建议。
-
-输出风格：
-客观冷静、直击灵魂、犀利但不失温情、充满哲学思辨。
-输出必须是 Markdown 格式。`;
-
 export async function analyzeSelf(userProfile: any, relationships: any[], diaries: any[]) {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  
   const relsText = relationships.map(r => `- ${r.targetName} (${r.type}): ${r.status}`).join('\n');
   const diariesText = diaries.map(d => `[${d.timestamp}] ${d.content}`).join('\n');
 
@@ -199,12 +195,8 @@ ${diariesText}
 请作为“镜像”，对我进行深度的灵魂剖析。`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        systemInstruction: SELF_ANALYSIS_SYSTEM_PROMPT,
-      },
+    const response = await callGeminiBackend(prompt, {
+      systemInstruction: SELF_ANALYSIS_SYSTEM_PROMPT,
     });
     
     return response.text;
@@ -215,8 +207,6 @@ ${diariesText}
 }
 
 export async function analyzePersonalityChange(oldProfile: any, newProfile: any) {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  
   const prompt = `
 旧个人资料：${JSON.stringify(oldProfile)}
 新个人资料：${JSON.stringify(newProfile)}
@@ -238,12 +228,8 @@ export async function analyzePersonalityChange(oldProfile: any, newProfile: any)
 `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json"
-      },
+    const response = await callGeminiBackend(prompt, {
+      responseMimeType: "application/json"
     });
     
     return safeJsonParse(response.text, { hasSignificantChange: false, diaryContent: null });
